@@ -1,19 +1,36 @@
-import express from 'express';
+import express, { Application } from 'express';
 import path from 'path';
 import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes';
 
 dotenv.config();
 
-const app = express();
-app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
-app.use(express.static(path.join(__dirname, 'image')));
+class App {
+  public app: Application;
 
-app.use('/', authRoutes);
+  constructor() {
+    this.app = express();
+    this.middlewares();
+    this.routes();
+  }
 
-const PORT = process.env.PORT || 5000;
+  private middlewares() {
+    this.app.use(express.json());
+    this.app.use(express.static(path.join(__dirname, 'public')));
+    this.app.use(express.static(path.join(__dirname, 'image')));
+  }
 
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+  private routes() {
+    this.app.use('/', authRoutes);
+  }
+
+  public start() {
+    const PORT = process.env.PORT || 5000;
+    this.app.listen(PORT, () => {
+      console.log(`Server is running on port ${PORT}`);
+    });
+  }
+}
+
+const server = new App();
+server.start();

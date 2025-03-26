@@ -1,9 +1,20 @@
-const express = require("express");
-const { registerUser, loginUser } = require("../controllers/authController");
-const { loginValidator,  registrationValidator} = require("../helpers/validation");
-const router = express.Router();
+import { Router } from 'express';
+import { registerUser, loginUser } from '../controllers/authController';
+import { loginValidator, registrationValidator } from '../helpers/validation';
 
-router.post("/register", registrationValidator, registerUser);
-router.post("/login", loginValidator, loginUser);
+class AuthRoutes {
+  public router: Router;
 
-module.exports = router;
+  constructor() {
+    this.router = Router();
+    this.routes();
+  }
+
+  private routes() {
+    this.router.post("/register", registrationValidator, registerUser);
+    this.router.post("/login", loginValidator, loginUser);
+  }
+}
+
+const authRoutes = new AuthRoutes();
+export default authRoutes.router;
