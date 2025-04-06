@@ -1,73 +1,64 @@
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
-const { validationResult } = require("express-validator");
-const db = require("../config/db");
+import { Request, Response } from 'express';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { validationResult } from 'express-validator';
+import db from '../config/db';
 
-const validation = (req,res) => {
-  const error = validationResult(req,res);
-  if (!error.isEmpty()) {
-    return res.status(400).json({ errors: error.array() });
-  }
-};
-
-// register
-const registerUser = async (req, res) => {
-  // const errors = validationResult(req);
-  // if (!errors.isEmpty()) {
-  //   return res.status(400).json({ errors: errors.array() });
-  // }
-  const validationError = validation(req, res);
-  if (validationError) {
-    return validationError;
+class AuthController {
+  private validation(req: Request, res: Response): null | Response {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    return null;
   }
 
-  const {
-    first_name,
-    last_name,
-    email,
-    password,
-    confirm_password,
-    contact_number,
-    address,
-  } = req.body;
-
-  if (password !== confirm_password) {
-    return res.status(400).json({
-      status: "error",
-      message: "Password and confirm password must be the same",
-      code: 400,
-    });
-  }
-
-  try {
-    // Check if the email already exists
-    const emailCheckQuery = "SELECT * FROM users WHERE email = ?";
-    const [existingUser] = await db.promise().query(emailCheckQuery, [email]);
-
-    if (existingUser.length > 0) {
-      return res.status(400).json({ message: "Email already exists" });
+  // Register User
+  public async registerUser(req: Request, res: Response): Promise<void> {
+    const validationError = this.validation(req, res);
+    if (validationError) {
+      return; // Express will handle the response.
     }
 
-    // Hash the password before storing it
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const { first_name, last_name, email, password, confirm_password, contact_number, address } = req.body;
 
-    const userData = {
-      first_name,
-      last_name,
-      email,
-      password: hashedPassword,
-      contact_number,
-      address,
-    };
+    if (password !== confirm_password) {
+      res.status(400).json({
+        status: "error",
+        message: "Password and confirm password must be the same",
+        code: 400,
+      });
+      return; // Ensure to return to prevent further execution
+    }
 
-    // Insert new user into the database
-    const insertQuery = `
-      INSERT INTO users (first_name, last_name, email, password, contact_number, address)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `;
-    const result = await db
-      .promise()
-      .query(insertQuery, [
+    try {
+      // Check if the email already exists
+      const emailCheckQuery = "SELECT * FROM users WHERE email = ?";
+      const [existingUser] = await db.promise().query<any[]>(emailCheckQuery, [email]);
+
+      if (existingUser.length > 0) {
+        res.status(400).json({ message: "Email already exists" });
+        return; // Ensure to return to prevent further execution
+      }
+
+      // Hash the password before storing it
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      const userData = {
+        first_name,
+        last_name,
+        email,
+        password: hashedPassword,
+        contact_number,
+        address,
+      };
+
+      // Insert new user into the database
+      const insertQuery = `
+        INSERT INTO users (first_name, last_name, email, password, contact_number, address)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `;
+      await db.promise().query(insertQuery, [
         userData.first_name,
         userData.last_name,
         userData.email,
@@ -76,39 +67,36 @@ const registerUser = async (req, res) => {
         userData.address,
       ]);
 
-    return res.status(201).json({ message: "User registered successfully" });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: "Error registering user" });
-  }
-};
-
-// login
-const loginUser = async (req, res) => {
-  const validationError = validation(req, res);
-  if (validationError) {
-    return validationError;
+      res.status(201).json({ message: "User registered successfully" });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ message: "Error registering user" });
+    }
   }
 
-  try {
-    const { email, password } = req.body;
+  // Login User
+  public async loginUser(req: Request, res: Response): Promise<void> {
+    const validationError = this.validation(req, res);
+    if (validationError) {
+      return; // Express will handle the response.
+    }
 
-    const emailCheckQuery = "SELECT * FROM users WHERE email = ?";
-    db.query(emailCheckQuery, [email], async (err, result) => {
-      if (err) {
-        console.error(err);
-        return res.status(500).json({ message: "Error checking email" });
-      }
+    try {
+      const { email, password } = req.body;
+
+      const emailCheckQuery = "SELECT * FROM users WHERE email = ?";
+      const [result] = await db.promise().query<any[]>(emailCheckQuery, [email]);
 
       if (result.length === 0) {
-        console.log(result);
-        return res.status(400).json({ message: "Invalid email" });
+        res.status(400).json({ message: "Invalid email" });
+        return; // Ensure to return to prevent further execution
       }
 
       const user = result[0];
       const isPasswordValid = await bcrypt.compare(password, user.password);
       if (!isPasswordValid) {
-        return res.status(400).json({ message: "Invalid password" });
+        res.status(400).json({ message: "Invalid password" });
+        return; // Ensure to return to prevent further execution
       }
 
       const payload = {
@@ -118,21 +106,22 @@ const loginUser = async (req, res) => {
         last_name: user.last_name,
       };
 
-      const token = jwt.sign(payload, process.env.JWT_SECRET, {
+      const token = jwt.sign(payload, process.env.JWT_SECRET as string, {
         expiresIn: "1h",
       });
 
-      return res.status(200).json({
+      res.status(200).json({
         message: "Login successful",
         token,
         first_name: user.first_name,
         last_name: user.last_name,
       });
-    });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: "Error logging in" });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ message: "Error logging in" });
+    }
   }
-};
+}
 
-module.exports = { loginUser, registerUser };
+const authController = new AuthController();
+export const { loginUser, registerUser } = authController;
